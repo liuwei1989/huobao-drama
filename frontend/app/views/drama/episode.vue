@@ -46,6 +46,14 @@
             :show-config="videoModelMultiCfg"
           />
           <ModelSelect
+            v-if="audioModelOptions.length"
+            v-model="audioModel"
+            :label="t('common.serviceType.audio')"
+            :options="audioModelOptions"
+            :default-label="t('episode.model.defaultWith', { model: audioModelOptions[0].model })"
+            :show-config="audioModelMultiCfg"
+          />
+          <ModelSelect
             v-model="episodeResolution"
             :label="t('episode.topbar.resolution')"
             :options="resolutionOptions"
@@ -174,16 +182,32 @@
             </div>
             <div class="toolbar-right">
               <span v-if="rawLen" class="char-count">{{ t('episode.script.charCount', { n: rawLen }) }}</span>
+              <div v-if="localRaw.trim()" class="script-view-toggle" role="group">
+                <button class="btn btn-sm" :class="{ 'is-on': !rawEditing }" :title="t('scriptLinks.previewTip')" @click="rawEditing = false">{{ t('scriptLinks.preview') }}</button>
+                <button class="btn btn-sm" :class="{ 'is-on': rawEditing }" @click="rawEditing = true">{{ t('scriptLinks.edit') }}</button>
+              </div>
               <button class="btn btn-sm" @click="saveRaw(); toast.success(t('episode.script.saved'))">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 {{ t('common.save') }}
               </button>
             </div>
           </div>
+          <!-- 预览：文中出现的本剧已有角色/场景/道具显示为链接，点击打开素材详情；双击或「编辑」回到文本框 -->
+          <ScriptPreview
+            v-if="!rawEditing && localRaw.trim()"
+            :text="localRaw"
+            :characters="drama?.characters || []"
+            :scenes="drama?.scenes || []"
+            :prop-items="drama?.props || []"
+            @open="openAssetDetail"
+            @edit="rawEditing = true"
+          />
           <textarea
+            v-else
             class="fill-textarea"
             v-model="localRaw"
             :placeholder="t('episode.script.rawPlaceholder')"
+            @focus="rawEditing = true"
           />
         </div>
 
@@ -198,6 +222,10 @@
             </div>
             <div class="toolbar-right">
               <span v-if="scriptLen" class="char-count">{{ t('episode.script.charCount', { n: scriptLen }) }}</span>
+              <div v-if="localScript.trim() && !(rn && rt === 'script_rewriter')" class="script-view-toggle" role="group">
+                <button class="btn btn-sm" :class="{ 'is-on': !scriptEditing }" :title="t('scriptLinks.previewTip')" @click="scriptEditing = false">{{ t('scriptLinks.preview') }}</button>
+                <button class="btn btn-sm" :class="{ 'is-on': scriptEditing }" @click="scriptEditing = true">{{ t('scriptLinks.edit') }}</button>
+              </div>
               <button v-if="rawContent" class="btn btn-sm" @click="skipRewrite">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M13 18l6-6-6-6"/></svg>
                 {{ t('episode.script.skipRewrite') }}
@@ -233,7 +261,16 @@
             <Loader2 :size="24" class="animate-spin" style="color:var(--accent)" />
             <div class="loading-text">{{ t('episode.script.rewriting') }}</div>
           </div>
-          <textarea v-else class="fill-textarea" v-model="localScript" :placeholder="t('episode.script.scriptPlaceholder')" />
+          <ScriptPreview
+            v-else-if="!scriptEditing && localScript.trim()"
+            :text="localScript"
+            :characters="drama?.characters || []"
+            :scenes="drama?.scenes || []"
+            :prop-items="drama?.props || []"
+            @open="openAssetDetail"
+            @edit="scriptEditing = true"
+          />
+          <textarea v-else class="fill-textarea" v-model="localScript" :placeholder="t('episode.script.scriptPlaceholder')" @focus="scriptEditing = true" />
         </div>
       </div>
 
@@ -303,6 +340,7 @@
             <div class="asset-section-title">
               {{ t('common.role') }}
               <button class="asset-add-btn" @click="openAssetCreate('character')"><Plus :size="11" /> {{ t('common.add') }}</button>
+              <button class="asset-add-btn" @click="openAssetLibrary('character')"><Library :size="11" /> {{ t('assetLibrary.open') }}</button>
             </div>
             <template v-if="visualChars.length">
             <div class="character-asset-grid">
@@ -330,6 +368,7 @@
                       <div v-else class="character-portrait-empty">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                       </div>
+                      <span v-if="c.episode_count > 1" class="asset-shared-badge">{{ t('assetLibrary.shared', { n: c.episode_count }) }}</span>
                       <span class="asset-cover-badge" :class="(c.image_url || c.imageUrl) ? 'is-ready' : (isPendingCharImage(c.id) ? 'is-pending' : '')">
                         {{ (c.image_url || c.imageUrl) ? t('episode.asset.portraitReady') : (isPendingCharImage(c.id) ? t('episode.asset.portraitPending') : t('episode.asset.portraitTodo')) }}
                       </span>
@@ -369,6 +408,7 @@
             <div class="asset-section-title">
               {{ t('common.scene') }}
               <button class="asset-add-btn" @click="openAssetCreate('scene')"><Plus :size="11" /> {{ t('common.add') }}</button>
+              <button class="asset-add-btn" @click="openAssetLibrary('scene')"><Library :size="11" /> {{ t('assetLibrary.open') }}</button>
             </div>
             <template v-if="scenes.length">
             <div class="asset-grid">
@@ -395,6 +435,7 @@
                   <div v-else class="asset-cover-empty">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                   </div>
+                  <span v-if="s.episode_count > 1" class="asset-shared-badge">{{ t('assetLibrary.shared', { n: s.episode_count }) }}</span>
                   <span class="asset-cover-badge" :class="(s.image_url || s.imageUrl) ? 'is-ready' : (isPendingSceneImage(s.id) ? 'is-pending' : '')">{{ (s.image_url || s.imageUrl) ? t('episode.asset.ready') : (isPendingSceneImage(s.id) ? t('episode.asset.generating') : t('episode.asset.todo')) }}</span>
                 </div>
                 <div class="asset-body">
@@ -425,6 +466,7 @@
             <div class="asset-section-title">
               {{ t('common.prop') }}
               <button class="asset-add-btn" @click="openAssetCreate('prop')"><Plus :size="11" /> {{ t('common.add') }}</button>
+              <button class="asset-add-btn" @click="openAssetLibrary('prop')"><Library :size="11" /> {{ t('assetLibrary.open') }}</button>
             </div>
             <div v-if="propItems.length" class="asset-grid">
               <div
@@ -450,6 +492,7 @@
                   <div v-else class="asset-cover-empty">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                   </div>
+                  <span v-if="p.episode_count > 1" class="asset-shared-badge">{{ t('assetLibrary.shared', { n: p.episode_count }) }}</span>
                   <span class="asset-cover-badge" :class="(p.image_url || p.imageUrl) ? 'is-ready' : (isPendingPropImage(p.id) ? 'is-pending' : '')">{{ (p.image_url || p.imageUrl) ? t('episode.asset.ready') : (isPendingPropImage(p.id) ? t('episode.asset.generating') : t('episode.asset.todo')) }}</span>
                 </div>
                 <div class="asset-body">
@@ -478,6 +521,18 @@
               </div>
             </div>
             <div v-else class="asset-props-empty">{{ t('episode.asset.propsEmpty') }}</div>
+
+            <!-- 配音（可选）：开启「单独配音」后提取台词、绑定角色音色、逐句合成，拼接导出时自动混入 -->
+            <div class="asset-section-title">{{ t('episode.prod.dub') }}</div>
+            <DubPanel
+              :episode-id="epId"
+              :drama-id="dramaId"
+              :storyboards="sbs"
+              :text-model="chatModelOverride()"
+              :text-config-id="chatConfigId()"
+              :audio-model="bareModelName(audioModel) || undefined"
+              :audio-config-id="ownerConfigId(audioModelOptions, audioModel)"
+            />
             </template>
           </div>
 
@@ -1082,7 +1137,10 @@
           <header class="dialog-head asset-detail-head">
             <div class="asset-detail-title-block">
               <span class="asset-detail-kicker">{{ assetTypeLabel(assetDetail.type) }}</span>
-              <h2 class="asset-detail-title">{{ assetDetailTitle(assetDetail) }}</h2>
+              <h2 class="asset-detail-title">
+                {{ assetDetailTitle(assetDetail) }}
+                <button class="btn btn-ghost btn-icon btn-sm asset-rename-btn" :title="t('assetRename.title', { type: assetTypeLabel(assetDetail.type) })" @click="assetRenameOpen = true"><Pencil :size="13" /></button>
+              </h2>
             </div>
             <div class="asset-detail-head-actions">
               <span class="tag" v-if="assetDetail.type === 'character'">{{ assetDetail.item.role || t('common.role') }}</span>
@@ -1414,14 +1472,35 @@
         </div>
       </div>
 
-      <ConfirmDialog
+      <!-- 移除素材：默认「移出本集」（不影响其他集），「从整部剧删除」需二次确认 -->
+      <AssetRemoveDialog
         :open="assetDelete.open"
-        :title="t('episode.delete.title', { type: assetDeleteTypeLabel })"
-        :message="t('episode.delete.message', { type: assetDeleteTypeLabel, name: assetDeleteName })"
+        :type-label="assetDeleteTypeLabel"
+        :name="assetDeleteName"
+        :episode-count="assetDelete.item?.episode_count || 1"
         :loading="assetDelete.loading"
-        @confirm="confirmDeleteAsset"
+        @unlink="confirmUnlinkAsset"
+        @delete="confirmDeleteAsset"
         @cancel="assetDelete.open = false"
       />
+
+      <AssetLibraryDialog
+        :open="assetLibrary.open"
+        :episode-id="epId"
+        :type="assetLibrary.type"
+        :type-label="assetKindLabel(assetLibrary.type)"
+        @close="assetLibrary.open = false"
+        @linked="onAssetsLinked"
+      />
+      <AssetRenameDialog
+        :open="assetRenameOpen"
+        :type="assetDetail.type"
+        :item="assetDetail.item"
+        :type-label="assetTypeLabel(assetDetail.type)"
+        @close="assetRenameOpen = false"
+        @renamed="onAssetRenamed"
+      />
+
     </main>
     </div>
   </div>
@@ -1432,13 +1511,18 @@ import { toast } from 'vue-sonner'
 import { useI18n } from 'vue-i18n'
 import {
   Users, FileText, FolderKanban, Clapperboard, Download, Loader2,
-  Plus, X, ListTodo, CircleHelp,
+  Plus, X, ListTodo, CircleHelp, Library, Pencil,
 } from 'lucide-vue-next'
 import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, taskAPI, mergeAPI, aiConfigAPI, uploadAPI } from '~/composables/useApi'
 import { startTour, autoTour } from '~/composables/useTour'
 import { useAgent } from '~/composables/useAgent'
 import { toastError, mapError, MODERATION_RE } from '~/composables/useToast'
 import LocaleSwitcher from '~/components/LocaleSwitcher.vue'
+import DubPanel from '~/components/DubPanel.vue'
+import AssetLibraryDialog from '~/components/AssetLibraryDialog.vue'
+import AssetRemoveDialog from '~/components/AssetRemoveDialog.vue'
+import ScriptPreview from '~/components/ScriptPreview.vue'
+import AssetRenameDialog from '~/components/AssetRenameDialog.vue'
 
 definePageMeta({ layout: 'studio' })
 
@@ -1505,6 +1589,9 @@ async function loadExportMerges() {
   try { exportMerges.value = await mergeAPI.list(epId.value) || [] } catch { /* 静默 */ }
 }
 
+// 剧本两步默认「预览」（素材名显示为链接），点「编辑」或双击切回文本框
+const rawEditing = ref(false)
+const scriptEditing = ref(false)
 const scriptStep = ref(storedPanel ? (storedPanel.scriptStep === 0 ? 0 : 1) : 0)
 // 旧版本地存储的 'storyboard' 子步骤已并入 'videos'（视频制作）
 const storedProdTab = storedPanel?.prodTab === 'storyboard' ? 'videos' : storedPanel?.prodTab
@@ -1560,9 +1647,10 @@ const prodTabIdx = computed({
 })
 const imageConfigs = ref([])
 const videoConfigs = ref([])
+const audioConfigs = ref([])
 const textConfigs = ref([])
 // 生成时可选模型：空串 = 跟随配置默认（models[0]）；选择持久化到 localStorage，刷新页面后保留
-const MODEL_STORE_KEYS = { chat: 'huobao:model:chat', image: 'huobao:model:image', video: 'huobao:model:video' }
+const MODEL_STORE_KEYS = { chat: 'huobao:model:chat', image: 'huobao:model:image', video: 'huobao:model:video', audio: 'huobao:model:audio' }
 function readStoredModel(key, legacyKey = '') {
   try { return localStorage.getItem(key) || (legacyKey && localStorage.getItem(legacyKey)) || '' } catch { return '' }
 }
@@ -1570,6 +1658,7 @@ function readStoredModel(key, legacyKey = '') {
 const chatModel = ref(readStoredModel(MODEL_STORE_KEYS.chat, 'huobao:model:rewrite'))
 const imageModel = ref(readStoredModel(MODEL_STORE_KEYS.image))
 const videoModel = ref(readStoredModel(MODEL_STORE_KEYS.video))
+const audioModel = ref(readStoredModel(MODEL_STORE_KEYS.audio))
 function persistModel(modelRef, key) {
   watch(modelRef, v => {
     try { v ? localStorage.setItem(key, v) : localStorage.removeItem(key) } catch {}
@@ -1578,6 +1667,7 @@ function persistModel(modelRef, key) {
 persistModel(chatModel, MODEL_STORE_KEYS.chat)
 persistModel(imageModel, MODEL_STORE_KEYS.image)
 persistModel(videoModel, MODEL_STORE_KEYS.video)
+persistModel(audioModel, MODEL_STORE_KEYS.audio)
 // 左侧菜单栏收起/展开：收起为窄图标栏给内容区让位，持久化到 localStorage
 const SIDEBAR_COLLAPSED_KEY = 'huobao:sidebar-collapsed'
 const sidebarCollapsed = ref((() => {
@@ -1723,6 +1813,34 @@ const assetDeleteName = computed(() => assetDelete.value.item?.name || assetDele
 
 function askDeleteAsset(type, item) {
   assetDelete.value = { open: true, type, item, loading: false }
+}
+
+async function confirmUnlinkAsset() {
+  const { type, item } = assetDelete.value
+  if (!item || assetDelete.value.loading) return
+  assetDelete.value.loading = true
+  try {
+    await episodeAPI.unlinkAsset(epId.value, type, item.id)
+    toast.success(t('assetRemove.unlinked', { type: assetDeleteTypeLabel.value }))
+    assetDelete.value.open = false
+    if (assetDetail.value.open && assetDetail.value.type === type && assetDetail.value.item?.id === item.id) closeAssetDetail()
+    await refresh()
+  } catch (e) {
+    toastError(e)
+  } finally {
+    assetDelete.value.loading = false
+  }
+}
+
+// 从项目（剧）素材库挑选已有素材加入本集，形象图直接复用
+const assetLibrary = ref({ open: false, type: 'character' })
+function openAssetLibrary(type) {
+  assetLibrary.value = { open: true, type }
+}
+async function onAssetsLinked(n) {
+  assetLibrary.value.open = false
+  if (n) toast.success(t('assetLibrary.added', { n, type: assetKindLabel(assetLibrary.value.type) }))
+  await refresh()
 }
 
 async function confirmDeleteAsset() {
@@ -1876,6 +1994,21 @@ function assetImageSrc(item) {
   if (!raw) return ''
   if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) return raw
   return `/${raw}`
+}
+
+// 素材改名：可同步替换本剧剧本/分镜/素材描述里的旧名，改完刷新（剧本、分镜内容可能已变）
+const assetRenameOpen = ref(false)
+async function onAssetRenamed(r) {
+  assetRenameOpen.value = false
+  const item = assetDetail.value.item
+  if (item) {
+    if (assetDetail.value.type === 'scene') item.location = r.new_name
+    else item.name = r.new_name
+  }
+  toast.success(r.cascaded && r.hits?.total
+    ? t('assetRename.doneCascade', { name: r.new_name, n: r.hits.total })
+    : t('assetRename.done', { name: r.new_name }))
+  await refresh()
 }
 
 function assetDetailTitle(detail) {
@@ -2108,6 +2241,7 @@ function hasMultiConfigs(options) {
 const textModelOptions = computed(() => collectModelOptions(textConfigs.value))
 const imageModelOptions = computed(() => collectModelOptions(imageConfigs.value))
 const videoModelOptions = computed(() => collectModelOptions(videoConfigs.value))
+const audioModelOptions = computed(() => collectModelOptions(audioConfigs.value))
 const selectedVideoConfig = computed(() => {
   const selected = videoModelOptions.value.find(option => option.key === videoModel.value)
   if (selected) return videoConfigs.value.find(config => config.id === selected.configId)
@@ -2183,9 +2317,11 @@ function pruneStaleModel(modelRef, optionsRef) {
 pruneStaleModel(chatModel, textModelOptions)
 pruneStaleModel(imageModel, imageModelOptions)
 pruneStaleModel(videoModel, videoModelOptions)
+pruneStaleModel(audioModel, audioModelOptions)
 const textModelMultiCfg = computed(() => hasMultiConfigs(textModelOptions.value))
 const imageModelMultiCfg = computed(() => hasMultiConfigs(imageModelOptions.value))
 const videoModelMultiCfg = computed(() => hasMultiConfigs(videoModelOptions.value))
+const audioModelMultiCfg = computed(() => hasMultiConfigs(audioModelOptions.value))
 
 // Production step helpers
 // ========== 任务列表面板 ==========
@@ -3353,14 +3489,16 @@ async function doMerge(ids) {
 }
 async function loadConfigs() {
   try {
-    const [imgCfgs, vidCfgs, txtCfgs] = await Promise.all([
+    const [imgCfgs, vidCfgs, txtCfgs, audCfgs] = await Promise.all([
       aiConfigAPI.list('image'),
       aiConfigAPI.list('video'),
       aiConfigAPI.list('text'),
+      aiConfigAPI.list('audio'),
     ])
     imageConfigs.value = imgCfgs || []
     videoConfigs.value = vidCfgs || []
     textConfigs.value = txtCfgs || []
+    audioConfigs.value = audCfgs || []
   } catch (e) { console.error('Failed to load AI configs', e) }
 }
 
@@ -3378,6 +3516,9 @@ onMounted(() => setTimeout(() => autoTour('episode', EPISODE_TOUR, t), 900))
 </script>
 
 <style scoped>
+.script-view-toggle { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--bg-hover); }
+.script-view-toggle .btn { box-shadow: none; background: transparent; }
+.script-view-toggle .btn.is-on { background: var(--bg-surface); color: var(--text-1); box-shadow: var(--button-shadow, 0 1px 2px rgba(0,0,0,0.06)); }
 /* ===== Studio Layout ===== */
 .studio {
   display: flex;
@@ -4458,6 +4599,19 @@ onMounted(() => setTimeout(() => autoTour('episode', EPISODE_TOUR, t), 900))
 .asset-cover img { width: 100%; height: 100%; object-fit: cover; }
 .previewable-image { cursor: zoom-in; transition: transform 0.18s var(--ease-out), filter 0.18s var(--ease-out); }
 .previewable-image:hover { transform: scale(1.015); filter: saturate(1.04); }
+.asset-shared-badge {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-size: 9.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
 .asset-cover-badge {
   position: absolute;
   top: 7px;
@@ -5240,6 +5394,8 @@ button.video-task-metric.on { box-shadow: 0 0 0 2px var(--accent); }
   padding: 14px 16px;
   border-bottom: 1px solid var(--surface-outline);
 }
+.asset-rename-btn { vertical-align: middle; margin-left: 4px; opacity: 0.6; }
+.asset-rename-btn:hover { opacity: 1; }
 .asset-detail-title-block {
   min-width: 0;
   display: flex;
