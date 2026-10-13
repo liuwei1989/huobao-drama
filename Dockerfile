@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 
 # ===== 前端构建：Nuxt generate 产出静态站点 =====
 FROM node:22-bookworm-slim AS frontend-build
@@ -7,7 +6,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 # lockfile 的 resolved 可能指向带鉴权的私有 registry（开发者本机 .npmrc），镜像内会 401。
 # 构建期删除 resolved 字段（integrity 校验不受影响），让 npm 统一走公共 registry
 RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+  && npm ci --no-audit --no-fund --registry=https://registry.npmmirror.com --fetch-timeout=600000 --fetch-retries=5
 COPY frontend/ ./
 RUN npm run generate
 
@@ -16,11 +15,12 @@ FROM node:22-bookworm AS backend-build
 WORKDIR /build/backend
 COPY backend/package.json backend/package-lock.json ./
 RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+  && npm ci --no-audit --no-fund --registry=https://registry.npmmirror.com --ignore-scripts --fetch-timeout=600000 --fetch-retries=5 \
+  && npm rebuild better-sqlite3 --build-from-source --registry=https://registry.npmmirror.com --fetch-timeout=600000 --fetch-retries=5
 COPY backend/ ./
 # 运行时与既有服务器部署一致走 tsx（源码存在 bundler 风格无扩展名 import，tsc 产物 node 直跑不可行）；
 # tsx 是 devDependency，prune 后单独补装
-RUN npm prune --omit=dev && npm i tsx@^4.21.0 --no-save --no-audit --no-fund --registry=https://registry.npmjs.org
+RUN npm prune --omit=dev && npm i tsx@^4.21.0 --no-save --no-audit --no-fund --registry=https://registry.npmmirror.com --fetch-timeout=600000 --fetch-retries=5
 
 # ===== 运行时 =====
 FROM node:22-bookworm-slim
@@ -36,7 +36,7 @@ ENV NODE_ENV=production \
     FRONTEND_DIST=/app/frontend-dist
 
 # ffprobe-static 不包含 Linux ARM64 二进制；两个架构统一使用系统媒体工具。
-RUN apt-get update \
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null; apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
