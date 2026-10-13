@@ -1,0 +1,19 @@
+[Unit]
+Description=MiniMax protocol shim for huobao-drama (local ComfyUI MiniMax-H3)
+After=network-online.target comfy-tunnel.service
+Wants=comfy-tunnel.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/huobao_drama
+Environment=SHIM_PORT=9001
+Environment=COMFY_URL=http://127.0.0.1:8188
+Environment=SHIM_OUT_DIR=/home/huobao_drama/data/static/videos
+Environment=SHIM_PUBLIC_BASE=https://drama.crayfish.cloud/static/videos
+ExecStart=/usr/local/bin/node /home/huobao_drama/minimax_shim.js
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

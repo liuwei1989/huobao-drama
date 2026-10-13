@@ -58,3 +58,8 @@ desktop/build/
 desktop/dist/
 desktop/release/
 desktop/resources/
+
+# 部署工作区（trae2）特有规则
+PRIVATE_ACCOUNT_INFO.md
+backup/
+*.tar.gz
