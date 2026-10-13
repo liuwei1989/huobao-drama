@@ -143,10 +143,23 @@ export class GeminiImageAdapter implements ImageProviderAdapter {
   }
 
   extractImageUrl(result: any): string | null {
-    return result?.data?.[0]?.url
+    const top = result?.data?.[0]?.url
       || result?.image_url
       || result?.url
-      || null
+    if (top) return top
+    // klong(new-api) gemini 生图返回 file_data.file_uri (R2 直链)，优先取之
+    const parts = result?.candidates?.[0]?.content?.parts || []
+    for (const part of parts) {
+      if (part?.file_data?.file_uri) return part.file_data.file_uri
+    }
+    // 兜底：部分网关把图片 URL 放在 text 中（裸 URL 或 markdown 图片语法均可）
+    for (const part of parts) {
+      if (part?.text && /https?:\/\/\S+\.(jpg|jpeg|png|webp|gif)/i.test(part.text)) {
+        const m = part.text.match(/https?:\/\/\S+\.(jpg|jpeg|png|webp|gif)/i)
+        if (m) return m[0]
+      }
+    }
+    return null
   }
 
   extractImageBase64(result: any): { data: string; mimeType: string } | null {
